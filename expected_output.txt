@@ -1,0 +1,177 @@
+// Test 1.
+// T1 should abort, T2 should not, because T2 commited first
+// and they both wrote x1 and x2.
+=== output of dump
+x1: 201 at site 2
+x2: 202 at all sites
+All other variables have their initial values.
+
+
+// Test 2
+// No aborts happens, since all transactions use
+// serializable snapshot isolation
+===
+reads return initial values of each variable, so 10 for x1 and 20 for x2.
+=== output of dump
+x1: 101 at site 2
+x2: 102 at all sites
+All other variables have their initial values.
+
+
+// Test 3
+// T1 should not abort because its site did not fail.
+// In fact all transactions commit
+// x8 has the value 88 at every site except site 2 where it won't have
+// the correct value right away but must wait for a write to take place.
+// All reads on x3 return 30.
+
+
+
+// Test 4
+// Now T1 aborts, since site 2 died after T1 accessed it. T2 ok.
+// Normally, we wait till the end(T1) to abort T1.
+// However, it is ok to abort T1 right away when fail(2) happens. Both
+// are correct.
+
+
+// Test 5
+// T1 fails again here because it wrote to a site that failed. T2 ok.
+
+
+// Test 6
+// T1 ok. T2 ok. T2 reads from a recovering site, but odd variables are not
+// replicated so that site 4's committed value for x3 is the  most up-to-date
+// value for x3.
+// At the dump, sites 3 and 4 would have their original values for x8.
+// Future reads of x8 to those sites should be refused until a committed write
+// takes place.
+
+
+// Test 7
+// T2 should read the initial version of x3 (value 30)
+// based on multi-version read
+// consistency which is part of snapshot isolation
+
+
+// Test 8
+// T2 still reads the initial value of x3
+// T3 reads the value of x3 written by T1
+
+
+// Test 9
+// T3 reads the original value of x4 (40).
+// T1 reads the original value of x2 as well (20), because that is the value
+// present when T1 began.
+
+
+// Test 10
+// T3 will read the original value of x4 T1 will read 22 from x2
+
+
+// Test 11
+// All should commit
+
+
+// Test 12
+// both commit
+
+
+// Test 13
+// Only T3 commits and final value of x2 is 10
+
+
+// Test 14
+// Only T1 commits and so final value of x2 is 20
+
+
+// Test 15
+// T1 will abort because x4 is on site 2 and  so
+// site 2 was accessed by T1 and then site 2 failed.
+// T2 will be fine but the T3, T4, and T5 will abort
+// because of first committer wins.
+// Final value of x4 is 44.
+
+
+// Test 16
+// T1 reads x2=22
+// R(T3,x4) also reads 40
+
+
+// Test 17
+// T3 will read initial value of x3 (30), T2 will commit, but T3
+// must abort because the fact that it accessed x3 is lost
+// upon failure
+// T1 reads the initial value of x2 because T3 has aborted.
+
+
+// Test 18
+// A circular conflict scenario where every edge is a RW edge.
+// Aborting any of these transactions will break the cycle.
+// Since T5 closes the cycle, it will abort and all others will succeed.
+// End state should reflect this.
+// T5 aborts
+
+
+// Test 19
+// An almost circular RW cycle  scenario with failures.
+// T3 fails (T2 and T4 do not fail because the site is up when they execute)
+// because site 4 fails.
+// All others succeed.
+
+
+// Test 20
+// T2 aborts, T1 succeeds
+
+
+// Test 21
+// simple r-w cycle
+// T1 ok, T2 aborts
+// T1 succeeds
+// T2 aborts, since commit causes a cycle
+
+
+// Test 22
+// T1 commits [ T2 -- rw --> T1 ]
+// T2 commits [T3 -- rw --> T2 -- rw --> T1]
+// T3 aborts [attempts to add edge T1 --- ww --> T3, creating a cycle hence aborts]
+
+
+// Test 23
+// T3 should abort because no site had a committed write to x8 before T3 began and was continuously up until T3 began
+
+
+// Test 24
+// Just like Test 23 because the committed write by T4 is not visible to T3.
+// T3 should still abort
+
+
+// Test 25
+// T3 must wait for site 2 because site 2 is the only site that
+// has a commit on x8 before begin(T3) and was up continuously
+// from that commit to begin(T3)
+// At R(T3,x8), T3 should now wait for site 2
+// At recover(2), T3 will be unblocked here, R(T3,x8) returns 88
+
+
+// Test 26
+// T1 should not abort because site 4 did not fail.
+// However T1 will write to x4 on every site except site 2.
+// Site 2 should not be able to respond to read requests for any
+// replicated variable after it recovers until a write is committed to it.
+// T1's write will not go to site 2, so every site except site 2
+// will have x4 equal to 91
+// T2 will not commit and W(T2,x8,88) is lost because of the abort.
+// Therefore x8 will not have value 88 because T2 aborts.
+// Even though site 2 recovers before T2 ends, T2 will not retroactively
+// write to the site (in any practical version of available copies).
+
+
+// Test 27
+// T1 should not abort because site 4 did not fail.
+// In this case, T1 will write to x4 on every site.
+// x8 will not value 88 because T2 aborts
+// the correct value right away but must wait for a write to take place.
+// So W(T2,x8,88) will not commit and is lost on failure.
+// Even though site 2 recovers before T2, T2 will not retroactively
+// write to the site (in any practical version of available copies).
+// T2 aborts because it wrote to x8.
